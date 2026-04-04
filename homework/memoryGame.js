@@ -1,40 +1,44 @@
+const $ = id => document.getElementById(id);
+
 const API = {
     async fetchHP() {
         const res = await fetch("https://hp-api.onrender.com/api/characters");
-        if (!res.ok) throw new Error(`HP API error: ${res.status}`);
+        console.log(res);
+        if (res.status !== 200) throw new Error(`HP API error: ${res.status}`);
         const data = await res.json();
-        return data
-            .filter(c => c.image && c.image.trim() !== "")
-            .slice(0, 6)
-            .map(c => ({ url: c.image, name: c.name }));
+        return data.filter(c => c.image?.trim()).slice(0, 6).map(c => ({ url: c.image, name: c.name }));
     },
 
     async fetchDogs() {
         const res = await fetch("https://dog.ceo/api/breeds/image/random/6");
-        if (!res.ok) throw new Error(`Dogs API error: ${res.status}`);
-        const data = await res.json();
-        return data.message.map((url, i) => ({ url, name: `Dog ${i + 1}` }));
+        console.log(res);
+        if (res.status !== 200) throw new Error(`Dogs API error: ${res.status}`);
+        const { message } = await res.json();
+        return message.map((url, i) => ({ url, name: `Dog ${i + 1}` }));
     },
 
     async fetchFlags() {
         const res = await fetch("https://restcountries.com/v3.1/all?fields=name,flags");
-        if (!res.ok) throw new Error(`Flags API error: ${res.status}`);
+        console.log(res);
+        if (res.status !== 200) throw new Error(`Flags API error: ${res.status}`);
         const data = await res.json();
-        const shuffled = data
-            .filter(c => c.flags && c.flags.png && c.name && c.name.common)
-            .sort(() => Math.random() - 0.5);
-        return shuffled.slice(0, 6).map(c => ({ url: c.flags.png, name: c.name.common }));
+        return data
+            .filter(c => c.flags?.png && c.name?.common)
+            .sort(() => Math.random() - 0.5)
+            .slice(0, 6)
+            .map(c => ({ url: c.flags.png, name: c.name.common }));
     }
 };
 
 const THEMES = {
-    hp: { fetch: API.fetchHP.bind(API), title: "⚡ Harry Potter" },
-    dogs: { fetch: API.fetchDogs.bind(API), title: "🐶 Dogs" },
-    flags: { fetch: API.fetchFlags.bind(API), title: "🌍 Flags" }
+    hp: { fetch: () => API.fetchHP(), title: "⚡ Harry Potter" },
+    dogs: { fetch: () => API.fetchDogs(), title: "🐶 Dogs" },
+    flags: { fetch: () => API.fetchFlags(), title: "🌍 Flags" }
 };
 
 class MemoryGame {
     constructor(images, title) {
+        this.images = images;
         this.title = title;
         this.cards = [];
         this.flippedCards = [];
@@ -43,83 +47,63 @@ class MemoryGame {
         this.isLocked = false;
         this.seconds = 0;
         this.timerInterval = null;
-        this._images = images;
     }
 
     init() {
-        this._resetState();
-        this._buildCards();
-        this._renderBoard();
-        this._startTimer();
-    }
-
-    stopTimer() {
         clearInterval(this.timerInterval);
-    }
+        Object.assign(this, { cards: [], flippedCards: [], matchedPairs: 0, moves: 0, isLocked: false, seconds: 0 });
 
-    _resetState() {
-        this.stopTimer();
-        this.cards = [];
-        this.flippedCards = [];
-        this.matchedPairs = 0;
-        this.moves = 0;
-        this.isLocked = false;
-        this.seconds = 0;
-    }
-
-    _buildCards() {
-        const selected = this._images;
-        this.cards = [...selected, ...selected]
+        this.cards = [...this.images, ...this.images]
             .sort(() => Math.random() - 0.5)
-            .map((img, index) => ({
-                id: index,
-                url: img.url,
-                name: img.name,
-                isFlipped: false,
-                isMatched: false
-            }));
-    }
+            .map((img, i) => ({ id: i, ...img, isFlipped: false, isMatched: false }));
 
-    _renderBoard() {
-        const board = document.getElementById("game-board");
+        const board = $("game-board");
         board.innerHTML = "";
-        document.getElementById("game-title").textContent = this.title;
-        document.getElementById("moves-count").textContent = "0";
-        document.getElementById("timer").textContent = "0:00";
-        this.cards.forEach(card => board.appendChild(this._createCardEl(card)));
+        $("game-title").textContent = this.title;
+        $("moves-count").textContent = "0";
+        $("timer").textContent = "0:00";
+        this.cards.forEach(card => board.appendChild(this._createCard(card)));
+
+        this.timerInterval = setInterval(() => {
+            this.seconds++;
+            const m = Math.floor(this.seconds / 60);
+            const s = String(this.seconds % 60).padStart(2, "0");
+            $("timer").textContent = `${m}:${s}`;
+        }, 1000);
     }
 
-    _createCardEl(card) {
+    stopTimer() { clearInterval(this.timerInterval); }
+
+    _createCard(card) {
         const el = document.createElement("div");
         el.className = "card";
         el.innerHTML = `
-      <div class="card-inner">
-        <div class="card-front">🃏</div>
-        <div class="card-back">
-          <img src="${card.url}" alt="${card.name}"
-               onerror="this.style.display='none'; this.parentElement.style.background='#2d3748';">
-          <span class="card-label">${card.name}</span>
-        </div>
-      </div>`;
-        el.addEventListener("click", () => this._handleFlip(el, card));
+            <div class="card-inner">
+                <div class="card-front">🃏</div>
+                <div class="card-back">
+                    <img src="${card.url}" alt="${card.name}"
+                         onerror="this.style.display='none'; this.parentElement.style.background='#2d3748';">
+                    <span class="card-label">${card.name}</span>
+                </div>
+            </div>`;
+        el.addEventListener("click", () => this._flip(el, card));
         return el;
     }
 
-    _handleFlip(el, card) {
+    _flip(el, card) {
         if (this.isLocked || card.isFlipped || card.isMatched || this.flippedCards.length >= 2) return;
-
         card.isFlipped = true;
         el.classList.add("flipped");
         this.flippedCards.push({ el, card });
 
         if (this.flippedCards.length === 2) {
             this.moves++;
-            document.getElementById("moves-count").textContent = this.moves;
-            this._checkMatch();
+            $("moves-count").textContent = this.moves;
+            this._check();
         }
     }
 
-    _checkMatch() {
+    _check() {
         this.isLocked = true;
         const [a, b] = this.flippedCards;
 
@@ -127,12 +111,16 @@ class MemoryGame {
             a.card.isMatched = b.card.isMatched = true;
             a.el.classList.add("matched");
             b.el.classList.add("matched");
-            this.matchedPairs++;
             this.flippedCards = [];
             this.isLocked = false;
-            if (this.matchedPairs === 6) {
+            if (++this.matchedPairs === 6) {
                 this.stopTimer();
-                setTimeout(() => this._showWin(), 600);
+                setTimeout(() => {
+                    const m = Math.floor(this.seconds / 60);
+                    const s = String(this.seconds % 60).padStart(2, "0");
+                    $("win-stats").textContent = `You finished in ${this.moves} moves and ${m}:${s}!`;
+                    $("win-modal").classList.remove("hidden");
+                }, 600);
             }
         } else {
             setTimeout(() => {
@@ -144,32 +132,13 @@ class MemoryGame {
             }, 1000);
         }
     }
-
-    _formatTime() {
-        const m = Math.floor(this.seconds / 60);
-        const s = this.seconds % 60;
-        return `${m}:${String(s).padStart(2, "0")}`;
-    }
-
-    _startTimer() {
-        this.timerInterval = setInterval(() => {
-            this.seconds++;
-            document.getElementById("timer").textContent = this._formatTime();
-        }, 1000);
-    }
-
-    _showWin() {
-        document.getElementById("win-stats").textContent =
-            `You finished in ${this.moves} moves and ${this._formatTime()}!`;
-        document.getElementById("win-modal").classList.remove("hidden");
-    }
 }
 
 let currentGame = null;
 
 function showScreen(id) {
     document.querySelectorAll(".screen").forEach(s => s.classList.add("hidden"));
-    document.getElementById(id).classList.remove("hidden");
+    $(id).classList.remove("hidden");
 }
 
 async function startGame(type) {
@@ -177,9 +146,7 @@ async function startGame(type) {
         const keys = Object.keys(THEMES);
         type = keys[Math.floor(Math.random() * keys.length)];
     }
-
     showScreen("loading-screen");
-
     try {
         const theme = THEMES[type];
         if (!theme) throw new Error(`Unknown theme: ${type}`);
@@ -196,24 +163,16 @@ async function startGame(type) {
 }
 
 document.addEventListener("click", e => {
-    const optionBtn = e.target.closest(".option-btn");
-    if (optionBtn) return startGame(optionBtn.dataset.type);
+    const btn = e.target.closest(".option-btn");
+    if (btn) return startGame(btn.dataset.type);
 
     const id = e.target.id;
-    if (id === "restart-btn") {
-        if (currentGame) {
-            document.getElementById("win-modal").classList.add("hidden");
-            currentGame.init();
-        }
-    } else if (id === "back-btn") {
-        if (currentGame) currentGame.stopTimer();
-        showScreen("selection-screen");
-    } else if (id === "play-again-btn") {
-        document.getElementById("win-modal").classList.add("hidden");
-        if (currentGame) currentGame.init();
-    } else if (id === "change-theme-btn") {
-        document.getElementById("win-modal").classList.add("hidden");
-        if (currentGame) currentGame.stopTimer();
+    if (id === "restart-btn" || id === "play-again-btn") {
+        $("win-modal").classList.add("hidden");
+        currentGame?.init();
+    } else if (id === "back-btn" || id === "change-theme-btn") {
+        $("win-modal").classList.add("hidden");
+        currentGame?.stopTimer();
         showScreen("selection-screen");
     }
 });
