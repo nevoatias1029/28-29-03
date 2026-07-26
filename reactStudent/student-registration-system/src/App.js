@@ -59,9 +59,8 @@ function ConfirmModal({ title, description, onConfirm, onCancel }) {
   );
 }
 
-// ============================================
 // Header Component
-// ============================================
+
 function Header({ studentCount, courseCount, enrollmentCount }) {
   return (
     <header className="header">
@@ -663,7 +662,6 @@ function App() {
                 </div>
               ) : (
                 <div className="empty-state">
-                  <div className="empty-state-icon">📋</div>
                   <h3 className="empty-state-title">No courses match this filter</h3>
                   <p className="empty-state-description">
                     Try selecting a different enrollment range or category.
