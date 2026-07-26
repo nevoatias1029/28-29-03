@@ -594,11 +594,11 @@ function App() {
               <div className="tabs" role="tablist">
                 {[
                   { key: 'all', label: 'All Courses' },
-                  { key: 'tech', label: '💻 Tech' },
-                  { key: 'data', label: '📊 Data' },
-                  { key: 'creative', label: '🎨 Creative' },
-                  { key: 'business', label: '💼 Business' },
-                  { key: 'science', label: '🔬 Science' },
+                  { key: 'tech', label: ' Tech' },
+                  { key: 'data', label: ' Data' },
+                  { key: 'creative', label: ' Creative' },
+                  { key: 'business', label: ' Business' },
+                  { key: 'science', label: ' Science' },
                 ].map((tab) => (
                   <button
                     key={tab.key}
