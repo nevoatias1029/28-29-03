@@ -110,7 +110,6 @@ const COURSES = [
   },
 ];
 
-// Pre-populated students
 const INITIAL_STUDENTS = [
   { id: 1, name: 'Emma Johnson', email: 'emma.johnson@mail.com', enrolledCourses: ['cs101', 'cr301'] },
   { id: 2, name: 'Liam Chen', email: 'liam.chen@mail.com', enrolledCourses: ['cs102', 'ds201'] },
