@@ -280,6 +280,78 @@ function CourseCard({ course, students, onEnroll, onUnenroll }) {
   );
 }
 
+// Enrollment Filter
+
+function EnrollmentFilter({ value, onChange }) {
+  return (
+    <div className="enrollment-filter">
+      <label className="enrollment-filter-label" htmlFor="enrollment-filter">
+        Filter by Enrollments
+      </label>
+      <select
+        id="enrollment-filter"
+        className="enrollment-filter-select"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        <option value="all">All Courses</option>
+        <option value="none">No enrollments</option>
+        <option value="1-10">1 - 10 enrollments</option>
+        <option value="11-30">11 - 30 enrollments</option>
+        <option value="30+">Over 30 enrollments</option>
+      </select>
+    </div>
+  );
+}
+
+// Filtered Course List
+
+function FilteredCourseList({ courses, students }) {
+  if (courses.length === 0) {
+    return (
+      <div className="empty-state">
+        <h3 className="empty-state-title">No courses match this filter</h3>
+        <p className="empty-state-description">
+          Try selecting a different enrollment range.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="filtered-course-list">
+      <div className="filtered-course-list-header">
+        Showing {courses.length} {courses.length === 1 ? 'course' : 'courses'}
+      </div>
+      <div className="filtered-course-items">
+        {courses.map((course) => {
+          const enrolledCount = students.filter((s) =>
+            s.enrolledCourses.includes(course.id)
+          ).length;
+          return (
+            <div key={course.id} className="filtered-course-item">
+              <div className="filtered-course-item-header">
+                <div className="filtered-course-item-title">{course.title}</div>
+                <span className={`course-card-category category-${course.category}`}>
+                  {course.category}
+                </span>
+              </div>
+              <p className="filtered-course-item-desc">{course.description}</p>
+              <div className="filtered-course-item-meta">
+                <span>{course.duration}</span>
+                <span>{course.level}</span>
+                <span className="filtered-course-enrollment-badge">
+                  {enrolledCount}/{course.maxStudents} enrolled
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // Student Detail View
 
 function StudentDetail({ student, onBack, onUnenroll }) {
@@ -372,6 +444,7 @@ function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [toasts, setToasts] = useState([]);
   const [confirmDelete, setConfirmDelete] = useState(null);
+  const [enrollmentFilter, setEnrollmentFilter] = useState('all');
   const [nextId, setNextId] = useState(7);
 
   // Toast helper
@@ -479,6 +552,23 @@ function App() {
     return COURSES.filter((c) => c.category === activeTab);
   }, [activeTab]);
 
+  // Filter courses by enrollment count
+  const enrollmentFilteredCourses = useMemo(() => {
+    if (enrollmentFilter === 'all') return [];
+    return COURSES.filter((course) => {
+      const count = students.filter((s) =>
+        s.enrolledCourses.includes(course.id)
+      ).length;
+      switch (enrollmentFilter) {
+        case 'none': return count === 0;
+        case '1-10': return count >= 1 && count <= 10;
+        case '11-30': return count >= 11 && count <= 30;
+        case '30+': return count > 30;
+        default: return true;
+      }
+    });
+  }, [enrollmentFilter, students]);
+
   // Filter students by search
   const filteredStudents = useMemo(() => {
     if (!searchQuery.trim()) return students;
@@ -579,27 +669,40 @@ function App() {
                 </p>
               </div>
 
-              <div className="tabs" role="tablist">
-                {[
-                  { key: 'all', label: 'All Courses' },
-                  { key: 'tech', label: ' Tech' },
-                  { key: 'data', label: ' Data' },
-                  { key: 'creative', label: ' Creative' },
-                  { key: 'business', label: ' Business' },
-                  { key: 'science', label: ' Science' },
-                ].map((tab) => (
-                  <button
-                    key={tab.key}
-                    className={`tab ${activeTab === tab.key ? 'active' : ''}`}
-                    onClick={() => setActiveTab(tab.key)}
-                    role="tab"
-                    aria-selected={activeTab === tab.key}
-                    id={`tab-${tab.key}`}
-                  >
-                    {tab.label}
-                  </button>
-                ))}
+              <div className="tabs-and-filter">
+                <div className="tabs" role="tablist">
+                  {[
+                    { key: 'all', label: 'All Courses' },
+                    { key: 'tech', label: 'Tech' },
+                    { key: 'data', label: 'Data' },
+                    { key: 'creative', label: 'Creative' },
+                    { key: 'business', label: 'Business' },
+                    { key: 'science', label: 'Science' },
+                  ].map((tab) => (
+                    <button
+                      key={tab.key}
+                      className={`tab ${activeTab === tab.key ? 'active' : ''}`}
+                      onClick={() => setActiveTab(tab.key)}
+                      role="tab"
+                      aria-selected={activeTab === tab.key}
+                      id={`tab-${tab.key}`}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+                <EnrollmentFilter
+                  value={enrollmentFilter}
+                  onChange={setEnrollmentFilter}
+                />
               </div>
+
+              {enrollmentFilter !== 'all' && (
+                <FilteredCourseList
+                  courses={enrollmentFilteredCourses}
+                  students={students}
+                />
+              )}
 
               <div className="course-grid">
                 {filteredCourses.map((course) => (
