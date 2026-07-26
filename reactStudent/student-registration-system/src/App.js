@@ -304,53 +304,6 @@ function EnrollmentFilter({ value, onChange }) {
   );
 }
 
-// Filtered Course List
-
-function FilteredCourseList({ courses, students }) {
-  if (courses.length === 0) {
-    return (
-      <div className="empty-state">
-        <h3 className="empty-state-title">No courses match this filter</h3>
-        <p className="empty-state-description">
-          Try selecting a different enrollment range.
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="filtered-course-list">
-      <div className="filtered-course-list-header">
-        Showing {courses.length} {courses.length === 1 ? 'course' : 'courses'}
-      </div>
-      <div className="filtered-course-items">
-        {courses.map((course) => {
-          const enrolledCount = students.filter((s) =>
-            s.enrolledCourses.includes(course.id)
-          ).length;
-          return (
-            <div key={course.id} className="filtered-course-item">
-              <div className="filtered-course-item-header">
-                <div className="filtered-course-item-title">{course.title}</div>
-                <span className={`course-card-category category-${course.category}`}>
-                  {course.category}
-                </span>
-              </div>
-              <p className="filtered-course-item-desc">{course.description}</p>
-              <div className="filtered-course-item-meta">
-                <span>{course.duration}</span>
-                <span>{course.level}</span>
-                <span className="filtered-course-enrollment-badge">
-                  {enrolledCount}/{course.maxStudents} enrolled
-                </span>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
 
 // Student Detail View
 
@@ -546,28 +499,27 @@ function App() {
     [students, showToast]
   );
 
-  // Filter courses by active tab
+  // Filter courses by active tab and enrollment count
   const filteredCourses = useMemo(() => {
-    if (activeTab === 'all') return COURSES;
-    return COURSES.filter((c) => c.category === activeTab);
-  }, [activeTab]);
+    let courses = activeTab === 'all' ? COURSES : COURSES.filter((c) => c.category === activeTab);
 
-  // Filter courses by enrollment count
-  const enrollmentFilteredCourses = useMemo(() => {
-    if (enrollmentFilter === 'all') return [];
-    return COURSES.filter((course) => {
-      const count = students.filter((s) =>
-        s.enrolledCourses.includes(course.id)
-      ).length;
-      switch (enrollmentFilter) {
-        case 'none': return count === 0;
-        case '1-10': return count >= 1 && count <= 10;
-        case '11-30': return count >= 11 && count <= 30;
-        case '30+': return count > 30;
-        default: return true;
-      }
-    });
-  }, [enrollmentFilter, students]);
+    if (enrollmentFilter !== 'all') {
+      courses = courses.filter((course) => {
+        const count = students.filter((s) =>
+          s.enrolledCourses.includes(course.id)
+        ).length;
+        switch (enrollmentFilter) {
+          case 'none': return count === 0;
+          case '1-10': return count >= 1 && count <= 10;
+          case '11-30': return count >= 11 && count <= 30;
+          case '30+': return count > 30;
+          default: return true;
+        }
+      });
+    }
+
+    return courses;
+  }, [activeTab, enrollmentFilter, students]);
 
   // Filter students by search
   const filteredStudents = useMemo(() => {
@@ -697,24 +649,27 @@ function App() {
                 />
               </div>
 
-              {enrollmentFilter !== 'all' && (
-                <FilteredCourseList
-                  courses={enrollmentFilteredCourses}
-                  students={students}
-                />
+              {filteredCourses.length > 0 ? (
+                <div className="course-grid">
+                  {filteredCourses.map((course) => (
+                    <CourseCard
+                      key={course.id}
+                      course={course}
+                      students={students}
+                      onEnroll={handleEnroll}
+                      onUnenroll={handleUnenroll}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="empty-state">
+                  <div className="empty-state-icon">📋</div>
+                  <h3 className="empty-state-title">No courses match this filter</h3>
+                  <p className="empty-state-description">
+                    Try selecting a different enrollment range or category.
+                  </p>
+                </div>
               )}
-
-              <div className="course-grid">
-                {filteredCourses.map((course) => (
-                  <CourseCard
-                    key={course.id}
-                    course={course}
-                    students={students}
-                    onEnroll={handleEnroll}
-                    onUnenroll={handleUnenroll}
-                  />
-                ))}
-              </div>
             </>
           )}
         </main>
