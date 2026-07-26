@@ -1,6 +1,4 @@
-/* ============================================
-   Simple & Clean Student Registration
-   ============================================ */
+/* Simple & Clean Student Registration */
 
 .app {
   min-height: 100vh;
@@ -710,12 +708,8 @@
   align-items: center;
   gap: 6px;
   min-width: 200px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
-
-.toast-success,
-.toast-error,
-.toast-info {}
 
 .toast-icon {
   font-size: 14px;
@@ -739,7 +733,7 @@
   padding: 20px;
   width: 90%;
   max-width: 380px;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
 }
 
 .modal-title {
@@ -765,6 +759,7 @@
   .main-content {
     flex-direction: column;
   }
+
   .sidebar {
     width: 100%;
     min-width: 100%;
@@ -772,9 +767,11 @@
     border-right: none;
     border-bottom: 1px solid var(--border);
   }
+
   .content-area {
     height: auto;
   }
+
   .header {
     padding: 10px 16px;
     flex-wrap: wrap;
@@ -786,13 +783,16 @@
   .course-grid {
     grid-template-columns: 1fr;
   }
+
   .detail-header {
     flex-direction: column;
     text-align: center;
   }
+
   .detail-back {
     margin-left: 0;
   }
+
   .detail-stats {
     justify-content: center;
   }

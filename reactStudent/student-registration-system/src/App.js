@@ -2,9 +2,8 @@ import React, { useState, useCallback, useMemo } from 'react';
 import './App.css';
 import { COURSES, AVATAR_COLORS, INITIAL_STUDENTS } from './data';
 
-// ============================================
 // Helper Functions
-// ============================================
+
 function getInitials(name) {
   return name
     .split(' ')
@@ -22,9 +21,8 @@ function getCourseById(id) {
   return COURSES.find((c) => c.id === id);
 }
 
-// ============================================
 // Toast Component
-// ============================================
+
 function Toast({ toasts }) {
   return (
     <div className="toast-container">
@@ -40,9 +38,8 @@ function Toast({ toasts }) {
   );
 }
 
-// ============================================
 // Confirm Modal
-// ============================================
+
 function ConfirmModal({ title, description, onConfirm, onCancel }) {
   return (
     <div className="modal-overlay" onClick={onCancel}>
@@ -93,9 +90,8 @@ function Header({ studentCount, courseCount, enrollmentCount }) {
   );
 }
 
-// ============================================
 // Add Student Form
-// ============================================
+
 function AddStudentForm({ onAdd }) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -137,15 +133,14 @@ function AddStudentForm({ onAdd }) {
         />
       </div>
       <button type="submit" className="btn btn-primary btn-full" id="add-student-btn">
-        ✨ Add Student
+        Add Student
       </button>
     </form>
   );
 }
 
-// ============================================
 // Student Card in Sidebar
-// ============================================
+
 function StudentCard({ student, isActive, onClick, onDelete }) {
   return (
     <div
@@ -183,9 +178,8 @@ function StudentCard({ student, isActive, onClick, onDelete }) {
   );
 }
 
-// ============================================
 // Course Card
-// ============================================
+
 function CourseCard({ course, students, onEnroll, onUnenroll }) {
   const [selectedStudent, setSelectedStudent] = useState('');
 
@@ -216,15 +210,12 @@ function CourseCard({ course, students, onEnroll, onUnenroll }) {
       <p className="course-card-description">{course.description}</p>
       <div className="course-card-meta">
         <span className="course-meta-item">
-          <span className="course-meta-icon">⏱️</span>
           {course.duration}
         </span>
         <span className="course-meta-item">
-          <span className="course-meta-icon">📈</span>
           {course.level}
         </span>
         <span className="course-meta-item">
-          <span className="course-meta-icon">👥</span>
           {enrolledStudents.length}/{course.maxStudents}
         </span>
       </div>
@@ -289,9 +280,8 @@ function CourseCard({ course, students, onEnroll, onUnenroll }) {
   );
 }
 
-// ============================================
 // Student Detail View
-// ============================================
+
 function StudentDetail({ student, onBack, onUnenroll }) {
   const enrolledCourses = student.enrolledCourses
     .map(getCourseById)
@@ -373,9 +363,8 @@ function StudentDetail({ student, onBack, onUnenroll }) {
   );
 }
 
-// ============================================
 // Main App Component
-// ============================================
+
 function App() {
   const [students, setStudents] = useState(INITIAL_STUDENTS);
   const [selectedStudentId, setSelectedStudentId] = useState(null);
@@ -524,7 +513,6 @@ function App() {
           <div className="sidebar-section">
             <div className="sidebar-section-title">Students</div>
             <div className="search-wrapper">
-              <span className="search-icon">🔍</span>
               <input
                 className="search-input"
                 type="text"
