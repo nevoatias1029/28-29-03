@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import './App.css';
-import { COURSES, AVATAR_COLORS, INITIAL_STUDENTS } from './data';
+import { AVATAR_COLORS } from './data';
+import * as api from './api';
 
 // --- Security: Input Sanitization ---
 
@@ -35,10 +36,6 @@ function getInitials(name) {
 
 function getAvatarColor(id) {
   return AVATAR_COLORS[id % AVATAR_COLORS.length];
-}
-
-function getCourseById(id) {
-  return COURSES.find((c) => c.id === id);
 }
 
 // --- Toast Component (aria-live for screen readers) ---
@@ -244,7 +241,7 @@ function AddStudentForm({ onAdd, existingEmails }) {
     setErrors(validate());
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setTouched({ name: true, email: true });
     const validationErrors = validate(name, email);
@@ -252,11 +249,13 @@ function AddStudentForm({ onAdd, existingEmails }) {
 
     if (Object.keys(validationErrors).length > 0) return;
 
-    onAdd({ name: sanitizeInput(name.trim()), email: sanitizeInput(email.trim()) });
-    setName('');
-    setEmail('');
-    setErrors({});
-    setTouched({});
+    const success = await onAdd({ name: sanitizeInput(name.trim()), email: sanitizeInput(email.trim()) });
+    if (success) {
+      setName('');
+      setEmail('');
+      setErrors({});
+      setTouched({});
+    }
   };
 
   return (
@@ -494,9 +493,9 @@ function EnrollmentFilter({ value, onChange }) {
 
 // --- Student Detail View ---
 
-function StudentDetail({ student, onBack, onUnenroll }) {
+function StudentDetail({ student, courses, onBack, onUnenroll }) {
   const enrolledCourses = student.enrolledCourses
-    .map(getCourseById)
+    .map((courseId) => courses.find((c) => c.id === courseId))
     .filter(Boolean);
 
   return (
@@ -581,14 +580,38 @@ function StudentDetail({ student, onBack, onUnenroll }) {
 // --- Main App Component ---
 
 function App() {
-  const [students, setStudents] = useState(INITIAL_STUDENTS);
+  const [students, setStudents] = useState([]);
+  const [courses, setCourses] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
   const [selectedStudentId, setSelectedStudentId] = useState(null);
   const [activeTab, setActiveTab] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [toasts, setToasts] = useState([]);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [enrollmentFilter, setEnrollmentFilter] = useState('all');
-  const [nextId, setNextId] = useState(7);
+
+  // Load students & courses from the API
+  const loadData = useCallback(async () => {
+    setIsLoading(true);
+    setLoadError(null);
+    try {
+      const [studentsData, coursesData] = await Promise.all([
+        api.fetchStudents(),
+        api.fetchCourses(),
+      ]);
+      setStudents(studentsData);
+      setCourses(coursesData);
+    } catch (err) {
+      setLoadError(err.message || 'Failed to load data');
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   // Toast helper with exit animation
   const showToast = useCallback((message, type = 'success') => {
@@ -614,100 +637,77 @@ function App() {
 
   // Add student
   const handleAddStudent = useCallback(
-    (studentData) => {
-      const newStudent = {
-        id: nextId,
-        name: studentData.name,
-        email: studentData.email,
-        enrolledCourses: [],
-      };
-      setStudents((prev) => [...prev, newStudent]);
-      setNextId((prev) => prev + 1);
-      showToast(`${studentData.name} added successfully!`);
+    async (studentData) => {
+      try {
+        const created = await api.createStudent(studentData);
+        setStudents((prev) => [...prev, created]);
+        showToast(`${created.name} added successfully!`);
+        return true;
+      } catch (err) {
+        showToast(err.message, 'error');
+        return false;
+      }
     },
-    [nextId, showToast]
+    [showToast]
   );
 
   // Delete student
   const handleDeleteStudent = useCallback(
-    (studentId) => {
+    async (studentId) => {
       const student = students.find((s) => s.id === studentId);
-      setStudents((prev) => prev.filter((s) => s.id !== studentId));
-      if (selectedStudentId === studentId) {
-        setSelectedStudentId(null);
+      try {
+        await api.deleteStudent(studentId);
+        setStudents((prev) => prev.filter((s) => s.id !== studentId));
+        if (selectedStudentId === studentId) {
+          setSelectedStudentId(null);
+        }
+        showToast(`${student?.name} removed`, 'info');
+      } catch (err) {
+        showToast(err.message, 'error');
+      } finally {
+        setConfirmDelete(null);
       }
-      setConfirmDelete(null);
-      showToast(`${student?.name} removed`, 'info');
     },
     [students, selectedStudentId, showToast]
   );
 
   // Enroll student in course
   const handleEnroll = useCallback(
-    (studentId, courseId) => {
+    async (studentId, courseId) => {
       const sid = typeof studentId === 'string' ? parseInt(studentId, 10) : studentId;
-      const student = students.find((s) => s.id === sid);
-      const course = getCourseById(courseId);
-
-      if (!student || !course) return;
-
-      if (student.enrolledCourses.includes(courseId)) {
-        showToast(`${student.name} is already enrolled in ${course.title}`, 'error');
-        return;
+      const course = courses.find((c) => c.id === courseId);
+      try {
+        const updated = await api.enrollStudent(sid, courseId);
+        setStudents((prev) => prev.map((s) => (s.id === sid ? updated : s)));
+        showToast(`${updated.name} enrolled in ${course?.title ?? courseId}`);
+      } catch (err) {
+        showToast(err.message, 'error');
       }
-
-      const enrolledCount = students.filter((s) =>
-        s.enrolledCourses.includes(courseId)
-      ).length;
-      if (enrolledCount >= course.maxStudents) {
-        showToast(`${course.title} is full (${course.maxStudents} max)`, 'error');
-        return;
-      }
-
-      setStudents((prev) =>
-        prev.map((s) =>
-          s.id === sid
-            ? { ...s, enrolledCourses: [...s.enrolledCourses, courseId] }
-            : s
-        )
-      );
-      showToast(`${student.name} enrolled in ${course.title}`);
     },
-    [students, showToast]
+    [courses, showToast]
   );
 
   // Unenroll student from course
   const handleUnenroll = useCallback(
-    (studentId, courseId) => {
-      const student = students.find((s) => s.id === studentId);
-      const course = getCourseById(courseId);
-
-      setStudents((prev) =>
-        prev.map((s) =>
-          s.id === studentId
-            ? {
-              ...s,
-              enrolledCourses: s.enrolledCourses.filter(
-                (cid) => cid !== courseId
-              ),
-            }
-            : s
-        )
-      );
-      showToast(
-        `${student?.name} unenrolled from ${course?.title}`,
-        'info'
-      );
+    async (studentId, courseId) => {
+      const course = courses.find((c) => c.id === courseId);
+      try {
+        const updated = await api.unenrollStudent(studentId, courseId);
+        setStudents((prev) => prev.map((s) => (s.id === studentId ? updated : s)));
+        showToast(`${updated.name} unenrolled from ${course?.title ?? courseId}`, 'info');
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
     },
-    [students, showToast]
+    [courses, showToast]
   );
 
   // Filter courses by active tab and enrollment count
   const filteredCourses = useMemo(() => {
-    let courses = activeTab === 'all' ? COURSES : COURSES.filter((c) => c.category === activeTab);
+    let result = activeTab === 'all' ? courses : courses.filter((c) => c.category === activeTab);
 
     if (enrollmentFilter !== 'all') {
-      courses = courses.filter((course) => {
+      result = result.filter((course) => {
         const count = students.filter((s) =>
           s.enrolledCourses.includes(course.id)
         ).length;
@@ -721,8 +721,8 @@ function App() {
       });
     }
 
-    return courses;
-  }, [activeTab, enrollmentFilter, students]);
+    return result;
+  }, [activeTab, enrollmentFilter, students, courses]);
 
   // Filter students by search (sanitize search query)
   const filteredStudents = useMemo(() => {
@@ -742,6 +742,31 @@ function App() {
 
   const selectedStudent = students.find((s) => s.id === selectedStudentId);
 
+  if (isLoading) {
+    return (
+      <div className="app">
+        <div className="empty-state" role="status" style={{ margin: '80px auto' }}>
+          <h3 className="empty-state-title">Loading…</h3>
+          <p className="empty-state-description">Fetching students and courses from the server.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="app">
+        <div className="empty-state" role="alert" style={{ margin: '80px auto' }}>
+          <h3 className="empty-state-title">Couldn't load data</h3>
+          <p className="empty-state-description">{loadError}</p>
+          <button className="btn btn-primary" onClick={loadData} style={{ marginTop: '12px' }}>
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="app">
       {/* Skip Navigation Link */}
@@ -751,7 +776,7 @@ function App() {
 
       <Header
         studentCount={students.length}
-        courseCount={COURSES.length}
+        courseCount={courses.length}
         enrollmentCount={totalEnrollments}
       />
 
@@ -824,6 +849,7 @@ function App() {
           {selectedStudent ? (
             <StudentDetail
               student={selectedStudent}
+              courses={courses}
               onBack={() => setSelectedStudentId(null)}
               onUnenroll={handleUnenroll}
             />
