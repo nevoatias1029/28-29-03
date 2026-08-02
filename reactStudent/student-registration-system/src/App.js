@@ -1,8 +1,28 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import './App.css';
 import { COURSES, AVATAR_COLORS, INITIAL_STUDENTS } from './data';
 
-// Helper Functions
+// --- Security: Input Sanitization ---
+
+function sanitizeInput(str) {
+  if (typeof str !== 'string') return '';
+  return str
+    .replace(/[<>]/g, '') // Strip angle brackets (prevent HTML injection)
+    .replace(/javascript:/gi, '') // Strip javascript: protocol
+    .replace(/on\w+=/gi, '') // Strip inline event handlers
+    .trim();
+}
+
+const MAX_NAME_LENGTH = 100;
+const MAX_EMAIL_LENGTH = 254;
+
+function isValidEmail(email) {
+  // RFC 5322 simplified email regex
+  const emailRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
+  return emailRegex.test(email);
+}
+
+// --- Helper Functions ---
 
 function getInitials(name) {
   return name
@@ -21,14 +41,23 @@ function getCourseById(id) {
   return COURSES.find((c) => c.id === id);
 }
 
-// Toast Component
+// --- Toast Component (aria-live for screen readers) ---
 
 function Toast({ toasts }) {
   return (
-    <div className="toast-container">
+    <div
+      className="toast-container"
+      aria-live="polite"
+      aria-atomic="false"
+      role="log"
+    >
       {toasts.map((toast) => (
-        <div key={toast.id} className={`toast toast-${toast.type}`}>
-          <span className="toast-icon">
+        <div
+          key={toast.id}
+          className={`toast toast-${toast.type} ${toast.exiting ? 'toast-exit' : ''}`}
+          role="status"
+        >
+          <span className="toast-icon" aria-hidden="true">
             {toast.type === 'success' ? '✅' : toast.type === 'error' ? '❌' : 'ℹ️'}
           </span>
           {toast.message}
@@ -38,14 +67,82 @@ function Toast({ toasts }) {
   );
 }
 
-// Confirm Modal
+// --- Confirm Modal (Focus Trap + Escape + ARIA) ---
 
 function ConfirmModal({ title, description, onConfirm, onCancel }) {
+  const modalRef = useRef(null);
+  const previousFocusRef = useRef(null);
+
+  useEffect(() => {
+    // Save the previously focused element
+    previousFocusRef.current = document.activeElement;
+
+    // Focus the modal
+    if (modalRef.current) {
+      modalRef.current.focus();
+    }
+
+    // Cleanup: return focus when modal closes
+    return () => {
+      if (previousFocusRef.current && previousFocusRef.current.focus) {
+        previousFocusRef.current.focus();
+      }
+    };
+  }, []);
+
+  // Handle Escape key & Focus trap
+  const handleKeyDown = useCallback(
+    (e) => {
+      if (e.key === 'Escape') {
+        onCancel();
+        return;
+      }
+
+      // Focus trap: keep Tab within modal
+      if (e.key === 'Tab') {
+        const focusableElements = modalRef.current?.querySelectorAll(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        );
+        if (!focusableElements || focusableElements.length === 0) return;
+
+        const firstElement = focusableElements[0];
+        const lastElement = focusableElements[focusableElements.length - 1];
+
+        if (e.shiftKey) {
+          if (document.activeElement === firstElement) {
+            e.preventDefault();
+            lastElement.focus();
+          }
+        } else {
+          if (document.activeElement === lastElement) {
+            e.preventDefault();
+            firstElement.focus();
+          }
+        }
+      }
+    },
+    [onCancel]
+  );
+
   return (
-    <div className="modal-overlay" onClick={onCancel}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <h3 className="modal-title">{title}</h3>
-        <p className="modal-description">{description}</p>
+    <div
+      className="modal-overlay"
+      onClick={onCancel}
+      onKeyDown={handleKeyDown}
+      role="presentation"
+    >
+      <div
+        className="modal"
+        onClick={(e) => e.stopPropagation()}
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="modal-title"
+        aria-describedby="modal-description"
+        ref={modalRef}
+        tabIndex={-1}
+      >
+        <h3 className="modal-title" id="modal-title">{title}</h3>
+        <p className="modal-description" id="modal-description">{description}</p>
         <div className="modal-actions">
           <button className="btn btn-ghost" onClick={onCancel}>
             Cancel
@@ -59,29 +156,29 @@ function ConfirmModal({ title, description, onConfirm, onCancel }) {
   );
 }
 
-// Header Component
+// --- Header Component ---
 
 function Header({ studentCount, courseCount, enrollmentCount }) {
   return (
-    <header className="header">
+    <header className="header" aria-label="Application header">
       <div className="header-brand">
-        <div className="header-logo">N</div>
+        <div className="header-logo" aria-hidden="true">N</div>
         <div>
           <div className="header-title">Course - Student Registration </div>
           <div className="header-subtitle"> Nevo Hub</div>
         </div>
       </div>
-      <div className="header-stats">
+      <div className="header-stats" aria-label="Statistics summary">
         <div className="header-stat">
-          <span className="header-stat-value">{studentCount}</span>
+          <span className="header-stat-value" aria-label={`${studentCount} students`}>{studentCount}</span>
           <span className="header-stat-label">Students</span>
         </div>
         <div className="header-stat">
-          <span className="header-stat-value">{courseCount}</span>
+          <span className="header-stat-value" aria-label={`${courseCount} courses`}>{courseCount}</span>
           <span className="header-stat-label">Courses</span>
         </div>
         <div className="header-stat">
-          <span className="header-stat-value">{enrollmentCount}</span>
+          <span className="header-stat-value" aria-label={`${enrollmentCount} enrollments`}>{enrollmentCount}</span>
           <span className="header-stat-label">Enrollments</span>
         </div>
       </div>
@@ -89,47 +186,128 @@ function Header({ studentCount, courseCount, enrollmentCount }) {
   );
 }
 
-// Add Student Form
+// --- Add Student Form (Validation + Sanitization + ARIA) ---
 
-function AddStudentForm({ onAdd }) {
+function AddStudentForm({ onAdd, existingEmails }) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [errors, setErrors] = useState({});
+  const [touched, setTouched] = useState({});
+
+  const validate = useCallback(
+    (fieldName, fieldEmail) => {
+      const newErrors = {};
+      const cleanName = fieldName !== undefined ? fieldName : name;
+      const cleanEmail = fieldEmail !== undefined ? fieldEmail : email;
+
+      if (touched.name || fieldName !== undefined) {
+        if (!cleanName.trim()) {
+          newErrors.name = 'Full name is required';
+        } else if (cleanName.trim().length < 2) {
+          newErrors.name = 'Name must be at least 2 characters';
+        }
+      }
+
+      if (touched.email || fieldEmail !== undefined) {
+        if (!cleanEmail.trim()) {
+          newErrors.email = 'Email is required';
+        } else if (!isValidEmail(cleanEmail.trim())) {
+          newErrors.email = 'Please enter a valid email address';
+        } else if (existingEmails.includes(cleanEmail.trim().toLowerCase())) {
+          newErrors.email = 'This email is already registered';
+        }
+      }
+
+      return newErrors;
+    },
+    [name, email, touched, existingEmails]
+  );
+
+  const handleNameChange = (e) => {
+    const value = sanitizeInput(e.target.value).slice(0, MAX_NAME_LENGTH);
+    setName(value);
+    if (touched.name) {
+      setErrors(validate(value, undefined));
+    }
+  };
+
+  const handleEmailChange = (e) => {
+    const value = sanitizeInput(e.target.value).slice(0, MAX_EMAIL_LENGTH);
+    setEmail(value);
+    if (touched.email) {
+      setErrors(validate(undefined, value));
+    }
+  };
+
+  const handleBlur = (field) => {
+    setTouched((prev) => ({ ...prev, [field]: true }));
+    setErrors(validate());
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!name.trim() || !email.trim()) return;
-    onAdd({ name: name.trim(), email: email.trim() });
+    setTouched({ name: true, email: true });
+    const validationErrors = validate(name, email);
+    setErrors(validationErrors);
+
+    if (Object.keys(validationErrors).length > 0) return;
+
+    onAdd({ name: sanitizeInput(name.trim()), email: sanitizeInput(email.trim()) });
     setName('');
     setEmail('');
+    setErrors({});
+    setTouched({});
   };
 
   return (
-    <form className="add-form" onSubmit={handleSubmit}>
+    <form className="add-form" onSubmit={handleSubmit} noValidate>
       <div className="add-form-title">
-        <span className="add-form-title-icon">+</span>
+        <span className="add-form-title-icon" aria-hidden="true">+</span>
         Add New Student
       </div>
       <div className="form-group">
         <label className="form-label" htmlFor="student-name">Full Name</label>
         <input
           id="student-name"
-          className="form-input"
+          className={`form-input ${errors.name ? 'input-error' : ''}`}
           type="text"
           placeholder="e.g. John Doe"
           value={name}
-          onChange={(e) => setName(e.target.value)}
+          onChange={handleNameChange}
+          onBlur={() => handleBlur('name')}
+          aria-required="true"
+          aria-invalid={!!errors.name}
+          aria-describedby={errors.name ? 'name-error' : undefined}
+          autoComplete="name"
+          maxLength={MAX_NAME_LENGTH}
         />
+        {errors.name && (
+          <div className="form-error" id="name-error" role="alert">
+            {errors.name}
+          </div>
+        )}
       </div>
       <div className="form-group">
         <label className="form-label" htmlFor="student-email">Email Address</label>
         <input
           id="student-email"
-          className="form-input"
+          className={`form-input ${errors.email ? 'input-error' : ''}`}
           type="email"
           placeholder="e.g. john@mail.com"
           value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          onChange={handleEmailChange}
+          onBlur={() => handleBlur('email')}
+          aria-required="true"
+          aria-invalid={!!errors.email}
+          aria-describedby={errors.email ? 'email-error' : undefined}
+          autoComplete="email"
+          maxLength={MAX_EMAIL_LENGTH}
         />
+        {errors.email && (
+          <div className="form-error" id="email-error" role="alert">
+            {errors.email}
+          </div>
+        )}
       </div>
       <button type="submit" className="btn btn-primary btn-full" id="add-student-btn">
         Add Student
@@ -138,7 +316,7 @@ function AddStudentForm({ onAdd }) {
   );
 }
 
-// Student Card in Sidebar
+// --- Student Card in Sidebar ---
 
 function StudentCard({ student, isActive, onClick, onDelete }) {
   return (
@@ -147,11 +325,19 @@ function StudentCard({ student, isActive, onClick, onDelete }) {
       onClick={onClick}
       role="button"
       tabIndex={0}
-      onKeyDown={(e) => e.key === 'Enter' && onClick()}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onClick();
+        }
+      }}
+      aria-pressed={isActive}
+      aria-label={`${student.name}, ${student.email}, ${student.enrolledCourses.length} courses enrolled`}
     >
       <div
         className="student-avatar"
         style={{ background: getAvatarColor(student.id) }}
+        aria-hidden="true"
       >
         {getInitials(student.name)}
       </div>
@@ -159,7 +345,7 @@ function StudentCard({ student, isActive, onClick, onDelete }) {
         <div className="student-card-name">{student.name}</div>
         <div className="student-card-email">{student.email}</div>
       </div>
-      <span className="student-card-badge">
+      <span className="student-card-badge" aria-hidden="true">
         {student.enrolledCourses.length} {student.enrolledCourses.length === 1 ? 'course' : 'courses'}
       </span>
       <button
@@ -177,7 +363,7 @@ function StudentCard({ student, isActive, onClick, onDelete }) {
   );
 }
 
-// Course Card
+// --- Course Card ---
 
 function CourseCard({ course, students, onEnroll, onUnenroll }) {
   const [selectedStudent, setSelectedStudent] = useState('');
@@ -197,10 +383,10 @@ function CourseCard({ course, students, onEnroll, onUnenroll }) {
   };
 
   return (
-    <div className="course-card" id={`course-${course.id}`}>
+    <article className="course-card" id={`course-${course.id}`} aria-labelledby={`course-title-${course.id}`}>
       <div className="course-card-header">
         <div>
-          <div className="course-card-title">{course.title}</div>
+          <div className="course-card-title" id={`course-title-${course.id}`}>{course.title}</div>
         </div>
         <span className={`course-card-category category-${course.category}`}>
           {course.category}
@@ -214,7 +400,7 @@ function CourseCard({ course, students, onEnroll, onUnenroll }) {
         <span className="course-meta-item">
           {course.level}
         </span>
-        <span className="course-meta-item">
+        <span className="course-meta-item" aria-label={`${enrolledStudents.length} of ${course.maxStudents} spots filled`}>
           {enrolledStudents.length}/{course.maxStudents}
         </span>
       </div>
@@ -222,17 +408,18 @@ function CourseCard({ course, students, onEnroll, onUnenroll }) {
       <div className="course-card-students">
         <div className="course-students-title">
           Enrolled Students
-          <span className="student-count">
+          <span className="student-count" aria-hidden="true">
             {enrolledStudents.length} enrolled
           </span>
         </div>
         {enrolledStudents.length > 0 ? (
-          <div className="enrolled-students">
+          <div className="enrolled-students" role="list" aria-label={`Students enrolled in ${course.title}`}>
             {enrolledStudents.map((student) => (
-              <span key={student.id} className="enrolled-student-chip">
+              <span key={student.id} className="enrolled-student-chip" role="listitem">
                 <span
                   className="chip-avatar"
                   style={{ background: getAvatarColor(student.id) }}
+                  aria-hidden="true"
                 >
                   {getInitials(student.name)}
                 </span>
@@ -271,15 +458,16 @@ function CourseCard({ course, students, onEnroll, onUnenroll }) {
           className="btn btn-primary btn-sm"
           onClick={handleEnroll}
           disabled={!selectedStudent}
+          aria-label={selectedStudent ? `Enroll selected student in ${course.title}` : 'Select a student first'}
         >
           Enroll
         </button>
       </div>
-    </div>
+    </article>
   );
 }
 
-// Enrollment Filter
+// --- Enrollment Filter ---
 
 function EnrollmentFilter({ value, onChange }) {
   return (
@@ -304,7 +492,7 @@ function EnrollmentFilter({ value, onChange }) {
 }
 
 
-// Student Detail View
+// --- Student Detail View ---
 
 function StudentDetail({ student, onBack, onUnenroll }) {
   const enrolledCourses = student.enrolledCourses
@@ -312,11 +500,12 @@ function StudentDetail({ student, onBack, onUnenroll }) {
     .filter(Boolean);
 
   return (
-    <div className="student-detail">
+    <div className="student-detail" aria-label={`Details for ${student.name}`}>
       <div className="detail-header">
         <div
           className="detail-avatar"
           style={{ background: getAvatarColor(student.id) }}
+          aria-hidden="true"
         >
           {getInitials(student.name)}
         </div>
@@ -351,11 +540,12 @@ function StudentDetail({ student, onBack, onUnenroll }) {
               Courses {student.name.split(' ')[0]} is currently taking
             </p>
           </div>
-          <div className="enrolled-courses-grid">
-            {enrolledCourses.map((course, index) => (
+          <div className="enrolled-courses-grid" role="list" aria-label="Enrolled courses">
+            {enrolledCourses.map((course) => (
               <div
                 key={course.id}
                 className="enrolled-course-card"
+                role="listitem"
               >
                 <div className="enrolled-course-info">
                   <h4>{course.title}</h4>
@@ -365,6 +555,7 @@ function StudentDetail({ student, onBack, onUnenroll }) {
                   <button
                     className="btn btn-danger btn-sm enrolled-course-unenroll"
                     onClick={() => onUnenroll(student.id, course.id)}
+                    aria-label={`Unenroll from ${course.title}`}
                   >
                     Unenroll
                   </button>
@@ -374,8 +565,8 @@ function StudentDetail({ student, onBack, onUnenroll }) {
           </div>
         </>
       ) : (
-        <div className="empty-state">
-          <div className="empty-state-icon">📚</div>
+        <div className="empty-state" role="status">
+          <div className="empty-state-icon" aria-hidden="true">📚</div>
           <h3 className="empty-state-title">No courses yet</h3>
           <p className="empty-state-description">
             This student hasn't been enrolled in any courses. Go to the courses
@@ -387,7 +578,7 @@ function StudentDetail({ student, onBack, onUnenroll }) {
   );
 }
 
-// Main App Component
+// --- Main App Component ---
 
 function App() {
   const [students, setStudents] = useState(INITIAL_STUDENTS);
@@ -399,14 +590,27 @@ function App() {
   const [enrollmentFilter, setEnrollmentFilter] = useState('all');
   const [nextId, setNextId] = useState(7);
 
-  // Toast helper
+  // Toast helper with exit animation
   const showToast = useCallback((message, type = 'success') => {
     const id = Date.now();
-    setToasts((prev) => [...prev, { id, message, type }]);
+    setToasts((prev) => [...prev, { id, message, type, exiting: false }]);
     setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 3000);
+      // Start exit animation
+      setToasts((prev) =>
+        prev.map((t) => (t.id === id ? { ...t, exiting: true } : t))
+      );
+      // Remove after animation
+      setTimeout(() => {
+        setToasts((prev) => prev.filter((t) => t.id !== id));
+      }, 300);
+    }, 2700);
   }, []);
+
+  // Existing emails for duplicate checking
+  const existingEmails = useMemo(
+    () => students.map((s) => s.email.toLowerCase()),
+    [students]
+  );
 
   // Add student
   const handleAddStudent = useCallback(
@@ -520,10 +724,10 @@ function App() {
     return courses;
   }, [activeTab, enrollmentFilter, students]);
 
-  // Filter students by search
+  // Filter students by search (sanitize search query)
   const filteredStudents = useMemo(() => {
     if (!searchQuery.trim()) return students;
-    const q = searchQuery.toLowerCase();
+    const q = sanitizeInput(searchQuery).toLowerCase();
     return students.filter(
       (s) =>
         s.name.toLowerCase().includes(q) ||
@@ -540,6 +744,11 @@ function App() {
 
   return (
     <div className="app">
+      {/* Skip Navigation Link */}
+      <a href="#main-content" className="skip-link">
+        Skip to main content
+      </a>
+
       <Header
         studentCount={students.length}
         courseCount={COURSES.length}
@@ -548,22 +757,29 @@ function App() {
 
       <div className="main-content">
         {/* Sidebar */}
-        <aside className="sidebar">
-          <AddStudentForm onAdd={handleAddStudent} />
+        <aside className="sidebar" aria-label="Student management panel">
+          <AddStudentForm onAdd={handleAddStudent} existingEmails={existingEmails} />
 
           <div className="sidebar-section">
-            <div className="sidebar-section-title">Students</div>
+            <div className="sidebar-section-title" id="students-list-label">Students</div>
             <div className="search-wrapper">
               <input
                 className="search-input"
-                type="text"
+                type="search"
                 placeholder="Search students..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 id="student-search"
+                aria-label="Search students by name or email"
               />
             </div>
-            <div className="student-list">
+            <div
+              className="student-list"
+              role="listbox"
+              aria-labelledby="students-list-label"
+              aria-activedescendant={selectedStudentId ? `student-${selectedStudentId}` : undefined}
+              tabIndex={0}
+            >
               {filteredStudents.length > 0 ? (
                 filteredStudents.map((student) => (
                   <StudentCard
@@ -579,8 +795,8 @@ function App() {
                   />
                 ))
               ) : (
-                <div className="empty-state" style={{ padding: '30px 10px' }}>
-                  <div className="empty-state-icon" style={{ fontSize: '32px' }}>
+                <div className="empty-state" style={{ padding: '30px 10px' }} role="status">
+                  <div className="empty-state-icon" style={{ fontSize: '32px' }} aria-hidden="true">
                     👤
                   </div>
                   <h3
@@ -604,7 +820,7 @@ function App() {
         </aside>
 
         {/* Main Content Area */}
-        <main className="content-area">
+        <main className="content-area" id="main-content" aria-label="Main content">
           {selectedStudent ? (
             <StudentDetail
               student={selectedStudent}
@@ -621,53 +837,58 @@ function App() {
               </div>
 
               <div className="tabs-and-filter">
-                <div className="tabs" role="tablist">
-                  {[
-                    { key: 'all', label: 'All Courses' },
-                    { key: 'tech', label: 'Tech' },
-                    { key: 'data', label: 'Data' },
-                    { key: 'creative', label: 'Creative' },
-                    { key: 'business', label: 'Business' },
-                    { key: 'science', label: 'Science' },
-                  ].map((tab) => (
-                    <button
-                      key={tab.key}
-                      className={`tab ${activeTab === tab.key ? 'active' : ''}`}
-                      onClick={() => setActiveTab(tab.key)}
-                      role="tab"
-                      aria-selected={activeTab === tab.key}
-                      id={`tab-${tab.key}`}
-                    >
-                      {tab.label}
-                    </button>
-                  ))}
-                </div>
+                <nav aria-label="Course categories">
+                  <div className="tabs" role="tablist">
+                    {[
+                      { key: 'all', label: 'All Courses' },
+                      { key: 'tech', label: 'Tech' },
+                      { key: 'data', label: 'Data' },
+                      { key: 'creative', label: 'Creative' },
+                      { key: 'business', label: 'Business' },
+                      { key: 'science', label: 'Science' },
+                    ].map((tab) => (
+                      <button
+                        key={tab.key}
+                        className={`tab ${activeTab === tab.key ? 'active' : ''}`}
+                        onClick={() => setActiveTab(tab.key)}
+                        role="tab"
+                        aria-selected={activeTab === tab.key}
+                        aria-controls="course-panel"
+                        id={`tab-${tab.key}`}
+                      >
+                        {tab.label}
+                      </button>
+                    ))}
+                  </div>
+                </nav>
                 <EnrollmentFilter
                   value={enrollmentFilter}
                   onChange={setEnrollmentFilter}
                 />
               </div>
 
-              {filteredCourses.length > 0 ? (
-                <div className="course-grid">
-                  {filteredCourses.map((course) => (
-                    <CourseCard
-                      key={course.id}
-                      course={course}
-                      students={students}
-                      onEnroll={handleEnroll}
-                      onUnenroll={handleUnenroll}
-                    />
-                  ))}
-                </div>
-              ) : (
-                <div className="empty-state">
-                  <h3 className="empty-state-title">No courses match this filter</h3>
-                  <p className="empty-state-description">
-                    Try selecting a different enrollment range or category.
-                  </p>
-                </div>
-              )}
+              <div id="course-panel" role="tabpanel" aria-labelledby={`tab-${activeTab}`}>
+                {filteredCourses.length > 0 ? (
+                  <div className="course-grid">
+                    {filteredCourses.map((course) => (
+                      <CourseCard
+                        key={course.id}
+                        course={course}
+                        students={students}
+                        onEnroll={handleEnroll}
+                        onUnenroll={handleUnenroll}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="empty-state" role="status">
+                    <h3 className="empty-state-title">No courses match this filter</h3>
+                    <p className="empty-state-description">
+                      Try selecting a different enrollment range or category.
+                    </p>
+                  </div>
+                )}
+              </div>
             </>
           )}
         </main>
