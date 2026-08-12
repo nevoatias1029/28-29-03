@@ -1,11 +1,55 @@
-# Deploying the Student Registration System
+# Running the Student Registration System
 
-This app is now two pieces: a Spring Boot API (`backend/`) backed by MySQL, and a
-React frontend (`student-registration-system/`) that talks to it over `fetch`.
-Both need to go online, and the browser-based signup/login steps below have to
-be done by you — an AI agent can't complete OAuth flows in a browser.
+This app is three pieces: a Spring Boot API (`backend/`) backed by MySQL, and a
+React frontend (`student-registration-system/`) served by nginx that talks to
+the API over `fetch`.
 
-## 1. Backend + MySQL on Railway
+## Option A: Everything local via Docker Compose (current setup)
+
+The simplest way to run the whole stack — no cloud accounts needed. From
+`reactStudent/`:
+
+```
+docker compose up --build -d
+```
+
+This builds and starts three containers:
+- `mysql` — MySQL 8.4, data persisted in the `mysql_data` Docker volume, only
+  reachable from the other containers (not exposed to the host)
+- `backend` — Spring Boot API, published at `http://localhost:8080`
+- `frontend` — the React app built for production and served by nginx, published
+  at `http://localhost:3000`
+
+All ports are bound to `127.0.0.1` only, so nothing is reachable from outside
+this machine (matches "local only, not public internet").
+
+Useful commands:
+- `docker compose ps` — see container status
+- `docker compose logs -f backend` (or `mysql`/`frontend`) — tail logs
+- `docker compose down` — stop everything (keeps the `mysql_data` volume, so
+  data survives a restart)
+- `docker compose down -v` — stop and wipe the database too (next `up` reseeds
+  from scratch)
+- `docker compose up --build -d` — rebuild after code changes and restart
+
+Open http://localhost:3000 in a browser once containers report `Healthy`/`Up`.
+
+Note: `student-registration-system/Dockerfile` uses `npm install` (not
+`npm ci`) because the committed `package-lock.json` doesn't match exactly what
+`npm ci` expects when built on Linux inside the container (a platform-specific
+transitive dependency issue) — worth revisiting with `npm install` +
+recommitting the lock file locally if this bothers you later, but it's not
+blocking anything.
+
+## Option B: Public internet deployment (Railway + Vercel)
+
+This was attempted but paused because configuring Railway's per-service Root
+Directory setting was proving finicky through the dashboard. The Dockerfile,
+`railway.json`, and steps below are still valid if you want to pick this back
+up later — just make sure the Root Directory field (Settings → Source, not
+"Watch Paths") is actually set to `reactStudent/backend` before deploying.
+
+### 1. Backend + MySQL on Railway
 
 1. Go to https://railway.app and sign in with GitHub.
 2. **New Project → Deploy from GitHub repo** → select `nevoatias1029/28-29-03`.
@@ -30,7 +74,7 @@ be done by you — an AI agent can't complete OAuth flows in a browser.
    12-course JSON list (the `DataSeeder` runs automatically on first boot
    against the empty Railway MySQL database).
 
-## 2. Frontend on Vercel
+### 2. Frontend on Vercel
 
 1. Go to https://vercel.com and sign in with GitHub.
 2. **Add New → Project** → import `nevoatias1029/28-29-03`.
@@ -41,7 +85,7 @@ be done by you — an AI agent can't complete OAuth flows in a browser.
    - `REACT_APP_API_URL` = `https://<your-railway-backend-domain>/api`
 5. Deploy. You'll get a URL like `https://your-project.vercel.app`.
 
-## 3. Close the loop
+### 3. Close the loop
 
 Once both URLs exist:
 
@@ -58,18 +102,3 @@ Once both URLs exist:
 4. Open the Vercel URL, confirm students/courses load and enroll/unenroll/add/
    delete all work against the live backend.
 
-## Local development (already set up on this machine)
-
-- MySQL 8.4 runs as a plain background process (not a Windows service, since
-  installing a service needs admin rights this session didn't have) on port
-  `3307`, database `student_registration`, app user `app_user`. To restart it
-  after a reboot:
-  ```
-  "C:\Program Files\MySQL\MySQL Server 8.4\bin\mysqld.exe" --defaults-file="C:\ProgramData\MySQL\MySQL Server 8.4\my.ini" --standalone --console
-  ```
-- Backend: `cd reactStudent/backend && $env:DB_PASSWORD="<see below>"; ./mvnw spring-boot:run`
-- Frontend: `cd reactStudent/student-registration-system && npm start`
-- The local `app_user` MySQL password is not committed to git. It was
-  generated once during setup — if you need it again, connect as root
-  (password `RootLocal84!Dev`, also not committed) and reset it, or just
-  recreate the user.
